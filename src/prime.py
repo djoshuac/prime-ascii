@@ -1,7 +1,10 @@
 from sympy import isprime
-from itertools import combinations_with_replacement, chain
+import itertools
 import numpy as np
-from threading import Thread
+from multiprocessing import Process
+import argparse
+import sys
+import os
 
 
 def parse_template(filename):
@@ -14,7 +17,7 @@ def parse_template(filename):
                 for c in row.strip()
                 if row.strip() != ''
             ])
-        return list(chain(*chars)), len(chars), len(chars[0])
+        return list(itertools.chain(*chars)), len(chars), len(chars[0])
 
 
 def find_prime(template, parallel_strategy=(1, 0)):
@@ -22,8 +25,7 @@ def find_prime(template, parallel_strategy=(1, 0)):
     Find prime numbers that match the given template.
 
     To enable multithreading, the parallel_strategy `(n, r)` splits up the work
-    roughly evenly using the remainder of dividing a candiate prime by `n`.
-    Specifically, this function skips all numbers c where `r != c % n`
+    by checking every nth possible option starting from r
     """
     n, r = parallel_strategy
 
@@ -33,7 +35,7 @@ def find_prime(template, parallel_strategy=(1, 0)):
     is_five = l == 5
     if is_even or is_five:
         raise Exception(
-            'Do not waste your time. Last digit cannot be 5 or even'
+            'Do not waste your time. The last digit in the template cannot be 5 or even.'
         )
 
     # the indexes of the variable digits
@@ -42,13 +44,15 @@ def find_prime(template, parallel_strategy=(1, 0)):
         for (i, d) in enumerate(template)
         if d == -1
     ]
-    for digits in combinations_with_replacement(range(10), len(variables)):
+    # TODO: combinations_with_replacement is wrong (e.g. [11, 12, 22] -- does not include 21)
+    options = itertools.combinations_with_replacement(range(10), len(variables))
+    for i, digits in enumerate(options):
+        if i % n != r:
+            continue
         template = list(template)  # make a copy to allow mutation
         for i, d in zip(variables, digits):
             template[i] = d
         candidate = int(''.join(map(str, template)))
-        if candidate % n != r:
-            continue
         if isprime(candidate):
             yield template
 
@@ -70,7 +74,6 @@ def file_writer(filename):
 
 def make_thread(template, nthreads, thread_number):
     out = file_writer(f'../tmp/work-{thread_number}')
-    template = list(template)
 
     def target():
         print(f'Starting thread {thread_number}')
@@ -78,10 +81,20 @@ def make_thread(template, nthreads, thread_number):
             out(''.join(map(str, prime)))
         print(f'Thread {thread_number} finished')
 
-    return Thread(
+    return Process(
         name=f'Thread-{thread_number}',
         target=target
     )
+
+
+def create_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="AsciiConverter",
+        description="Converts an image into an ascii art number",
+    )
+    parser.add_argument('-t', '--template', required=True, help="template asci art plain text file")
+    parser.add_argument('-c', '--concurrency', required=True, help="number of threads", type=int)
+    return parser
 
 
 if __name__ == '__main__':
@@ -95,11 +108,15 @@ if __name__ == '__main__':
 
     Spaces are variable digits
     """
-    filename = default_input('Template filename: ', '../templates/demo.txt')
-    nthreads = int(default_input('Number of threads: ', '1'))
+    parser = create_arg_parser()
+    args = parser.parse_args(sys.argv[1:])
+    filename = args.template
+    nthreads = args.concurrency
 
     template, height, width = parse_template(filename)
 
+    if not os.path.exists('../tmp/'):
+        os.mkdir('../tmp') # TODO: find a better way, ot at least make this directory more obvious to user
     # find primes with multithreading
     # If you notice some primes have been found in the `tmp/work-x`
     # files, you can comment out these lines and rerun to print the
