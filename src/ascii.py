@@ -1,12 +1,15 @@
 from PIL import Image
 from math import floor
 import numpy as np
+import argparse
+import sys
 
 # digits are sorted from lightest to darkest in intensity
-# e.g. the brightest pixels are be asigned a 7
-DIGITS = list(reversed([7, 1, 3, 2, 5, 9, 6, 0]))
-# aspect ratio of monospace font characters (taller than wide)
+# e.g. the darkest pixels map to 0, the brightest pixels map to 7
+DIGITS = list(reversed([7, 1, 3, 2, 5, 9, 6, 8, 0]))
+"digits are sorted from darkest to brightest"
 MONOSPACE = 0.6
+"aspect ratio of monospace font characters (height / width)"
 
 
 def within_threshold(x, target, threshold=0.01):
@@ -85,10 +88,23 @@ def file_writer(filename):
     return lambda x: file.write(x + '\n')
 
 
+def create_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="AsciiConverter",
+        description="Converts an image into an ascii art number",
+    )
+    parser.add_argument('-i', '--input', help="image file to convert to ascii")
+    parser.add_argument('-d', '--digits', help="cap on number of digits in the resulting image", type=int)
+    parser.add_argument('-o', '--output', help="path to store ascii art text file", default='')
+    return parser
+
+
 if __name__ == '__main__':
-    filename = default_input('Image filename: ', '../images/demo.png')
-    max_digits = default_input('Max digits: ', 1200)
-    output_filename = input('Output file: ')
+    parser = create_arg_parser()
+    args = parser.parse_args(sys.argv[1:])
+    filename = args.input
+    max_digits = args.digits
+    output_filename = args.output
     out = print if output_filename == '' else file_writer(output_filename)
 
     asc = image_to_ascii_digits(filename, max_digits)
